@@ -193,6 +193,12 @@
       color: var(--accent);      /* blue */
     }
 
+    /* Disable page-scroll while the finger is inside the main canvas.*/
+    #diagram {
+      touch-action: none;
+    }
+
+
   </style>
 </head>
 <body>
@@ -357,22 +363,33 @@ slitSlider.addEventListener('input', () => {
      Mouse drag logic for the moveable detector
   ----------------------------------------------------------- */
 
-diag.addEventListener('mousedown', e => {
-  const {left, top} = diag.getBoundingClientRect();
-  const x = e.clientX - left;
-  const y = e.clientY - top;
-  if (x >= handleX-handleW/2 && x <= handleX+handleW/2 &&
-      y >= handleY-handleH/2 && y <= handleY+handleH/2) {
-    isDragging = true;
+/* ─── detector drag – pointer-events version ───────────────── */
+
+  diag.addEventListener('pointerdown', onDown, { passive:false });
+  diag.addEventListener('pointermove', onMove,  { passive:false });
+  window.addEventListener('pointerup', () => isDragging = false);
+
+  function onDown (e) {
+    const { left, top } = diag.getBoundingClientRect();
+    const x = e.clientX - left;
+    const y = e.clientY - top;
+
+    if (x >= handleX - handleW/2 && x <= handleX + handleW/2 &&
+        y >= handleY - handleH/2 && y <= handleY + handleH/2) {
+      isDragging = true;
+      e.preventDefault();                  // stop page scroll/zoom
+      diag.setPointerCapture(e.pointerId); // keep events while dragging
+    }
+  }
+
+  function onMove (e) {
+    if (!isDragging) return;
+    const { top } = diag.getBoundingClientRect();
+    handleY = Math.max(handleMinY,
+              Math.min(handleMaxY, e.clientY - top));
     e.preventDefault();
   }
-});
-window.addEventListener('mouseup', () => isDragging=false);
-diag.addEventListener('mousemove', e => {
-  if (!isDragging) return;
-  const {top} = diag.getBoundingClientRect();
-  handleY = Math.max(handleMinY, Math.min(handleMaxY, e.clientY - top));
-});
+
 
   /* -----------------------------------------------------------
      Helper function to determine RGB values on wavelength
