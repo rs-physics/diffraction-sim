@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diffraction Simulator</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8f9fa;
+      --panel: #ffffff;
+      --text: #222;
+      --accent: #007bff;
+      --border: #ccc;
+      --highlight: #e0e0e0;
+      --font: system-ui, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin: 1rem;
+      color: var(--accent);
+    }
+
+    canvas {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    #info {
+      flex: 1 0 100%;
+      margin-top: 0.5rem;
+      font-weight: bold;
+      color: var(--accent);
+      text-align: center;
+    }
+
+    #waveContainer h2 {
+      margin: 0.5rem 0 0.5rem 0;
+      font-size: 1.2rem;
+      color: var(--accent);
+    }
+
+    .waveBlock {
+      margin-bottom: 1rem;
+    }
+
+    .waveBlock h3 {
+      margin: 0.25rem 0;
+      font-size: 0.95rem;
+      font-weight: normal;
+      color: #555;
+    }
+
+    /* Keep each canvas at its intrinsic size */
+    .waveCanvas {
+      flex: none;          /* don’t grow or shrink */
+      display: block;      /* drops the inline baseline weirdness */
+    }
+
+    /* Arrange canvas + info side-by-side without stretching */
+    .waveWithInfo {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    #waveContainer { margin-left:auto; }   /* keeps it flush right in the row */
+
+    #infoBox {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.95rem;
+      color: var(--accent);
+      min-width: 14rem;
+    }
+
+    #infoBox div {
+      margin: 0.2rem 0;
+    }
+
+    /* row that holds zoom (left) + waveContainer (right) */
+    #bottomRow {
+      display: flex;
+      gap: 1rem;
+    }
+
+    /* zoom canvas style */
+    .zoomCanvas {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 0.5rem;
+    }
+
+    /* keep zoom reasonably small */
+    .zoomCanvas { width: 400px; height: 200px; }
+
+    /* zoom column behaves like the wave column */
+    #zoomContainer {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    #zoomContainer h2 {
+      margin: 0.5rem 0 0.5rem 0;   /* same as wave heading */
+      font-size: 1.2rem;
+      color: var(--accent);
+    }
+
+    /* δ read-out style */
+    #pathDiff {
+      margin: 0.25rem 0 0 0;
+      font-size: 0.95rem;
+      font-weight: bold;
+      color: #000;
+    }
+
+    #phaseDiff { font-weight: bold;}
+
+    .detectorHeader {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .freezeLbl {
+      font-size: 0.9rem;
+      user-select: none;
+    }
+
+    /* title + sliders row */
+    #topBar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 900px;      /* matches diagram width cap */
+      padding: 0 1rem;
+    }
+
+    #mainTitle {            /* was h1 */
+      margin: 1rem 0;
+      font-size: 1.6rem;
+      color: var(--accent);
+    }
+
+    .sliderRow {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: nowrap;      /* 👈 stay on one line */
+      font-size: 0.95rem;
+    }
+
+    .sliderRow input {        /* slider can shrink / stretch */
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .sliderRow span {         /* headings & value read-outs */
+      flex-shrink: 0;         /* never squash into a new line */
+      white-space: nowrap;    /* no internal wrapping */
+    }
+
+    #sliderBox label {
+      font-size: 0.95rem;
+    }
+
+    .sliderGroup {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .subHead {
+      margin: 0.25rem 0 0 0;
+      font-size: 0.95rem;        /* same size as other sub-heads */
+      font-weight: normal;
+      color: var(--accent);      /* blue */
+    }
+
+  </style>
+</head>
+<body>
+  <!-- top bar: title on the left, sliders on the right -->
+  <div id="topBar">
+    <h1 id="mainTitle">Diffraction Simulator</h1>
+
+    <div id="sliderBox">
+      <div class="sliderRow">
+        <span class="subHead">Wavelength&nbsp;(nm):</span>
+        <input id="wavelengthSlider" type="range" min="400" max="700" step="1" value="700">
+        <span id="wavelengthValue">700&nbsp;nm</span>
+      </div>
+
+      <div class="sliderRow">
+        <span class="subHead">Slit&nbsp;Separation&nbsp;(mm):</span>
+        <input id="slitSlider" type="range" min="0.1" max="0.3" step="0.01" value="0.1">
+        <span id="slitValue">0.10&nbsp;mm</span>
+      </div>
+
+    </div>
+  </div>
+
+
+  <canvas id="diagram"></canvas>
+    <div id="bottomRow">
+
+      <!-- ⬅ Left-hand column: heading + zoom + δ readout -->
+      <div id="zoomContainer">
+        <h2>Double Slit – Zoomed in View</h2>
+
+        <canvas id="zoom" class="zoomCanvas"></canvas>
+
+        <div id="pathDiff"></div>
+
+      </div>
+
+      <!-- ➡ Right-hand: existing wave section (unchanged markup except infoBox moved) -->
+      <div id="waveContainer">
+        <div class="detectorHeader">
+          <h2>Detector Signal</h2>
+
+          <label class="freezeLbl">
+            <input type="checkbox" id="freezeToggle">
+            Freeze animation
+          </label>
+        </div>
+
+        <div class="waveBlock">
+          <h3>Signal showing wave from upper slit (green) and lower slit (red)</h3>
+
+          <canvas id="wave" class="waveCanvas"></canvas>
+
+          <!-- moved below the graph -->
+          <div id="infoBox">
+            <div id="phaseDiff"></div>
+          </div>
+        </div>
+
+        <div class="waveBlock">
+          <h3>Superposition of the signals – what the detector (and we) see</h3>
+          <canvas id="superposition" class="waveCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ------------ DOM and basic canvases ------------ */
+const diag  = document.getElementById('diagram');
+const waveContainer = document.getElementById('waveContainer');
+const wave  = document.getElementById('wave');
+const scan = document.getElementById('superposition');
+const sctx = scan.getContext('2d');
+const dctx  = diag.getContext('2d');
+const wctx  = wave.getContext('2d');
+const info  = document.getElementById('info');
+const freezeToggle = document.getElementById('freezeToggle');
+const wavelengthSlider = document.getElementById('wavelengthSlider');
+const slitSlider = document.getElementById('slitSlider');
+wavelengthSlider.value = 700;
+const zoom  = document.getElementById('zoom');
+const zctx  = zoom.getContext('2d');
+zoom.width  = 400;
+zoom.height = 200;
+const bottomRow = document.getElementById('bottomRow')
+
+/* ------------ embedded / external images ------------ */
+const laserImg = new Image();
+laserImg.src =
+  'data:image/png;base64,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';
+
+const detectorImg = new Image();
+detectorImg.src =
+  'data:image/png;base64,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';
+
+/* ------------ animation / wave constants ------------ */
+let t = 0;
+const cycles   = 4;
+const ampFrac  = 0.25;
+
+/* ------------ program constants (small-angle world) ------------ */
+let lambda = 700;              // wavelength in nm
+let separation = 0.1;          // slit separation in mm
+
+let wavelength = lambda * 1/500;
+let slitSeparation = separation * 100;
+
+let   screenDistance = 1;   // D  (set in resize)
+
+/* ------------ draggable detector handle ------------ */
+const handleW = 40, handleH = 20;
+let handleX, handleY, handleMinY, handleMaxY;
+let isDragging = false;
+
+/* ------------ sizing / layout ------------ */
+function resize() {
+  
+  /* main diagram */
+  const maxW = Math.min(window.innerWidth, 900);
+  diag.width = maxW;  
+  diag.height = 400;
+  bottomRow.style.width = maxW + "px";
+  
+  /* small canvases = half-width */
+  const half = Math.floor(maxW * 0.5);   
+  wave.width  = half;  wave.height = 130;                   
+  scan.width  = half;  scan.height = 130;
+
+  /* make the container share the diagram’s width */
+  waveContainer.style.width = maxW + "px";
+
+  const screenX = diag.width - 80;     // right-hand screen position
+  handleX = screenX + 45;
+  handleY = diag.height / 2;
+  handleMinY = 20;                     // <<< changed
+  handleMaxY = diag.height - 20;       // <<< changed
+
+  screenDistance = screenX - diag.width * 0.25;   // gratX is 0.25*width
+}
+resize();
+window.addEventListener('resize', resize);
+
+/*------ sliders for wavelength and slit separation ------*/
+const wavelengthValue = document.getElementById('wavelengthValue');
+const slitValue = document.getElementById('slitValue');
+
+wavelengthSlider.addEventListener('input', () => {
+  lambda = parseFloat(wavelengthSlider.value);
+  wavelength = lambda * 1/500;
+  wavelengthValue.textContent = `${lambda} nm`;
+});
+
+slitSlider.addEventListener('input', () => {
+  separation = parseFloat(slitSlider.value);
+  slitSeparation = separation * 100;
+  slitValue.textContent = `${separation.toFixed(2)} mm`;
+});
+
+
+  /* -----------------------------------------------------------
+     Mouse drag logic for the moveable detector
+  ----------------------------------------------------------- */
+
+diag.addEventListener('mousedown', e => {
+  const {left, top} = diag.getBoundingClientRect();
+  const x = e.clientX - left;
+  const y = e.clientY - top;
+  if (x >= handleX-handleW/2 && x <= handleX+handleW/2 &&
+      y >= handleY-handleH/2 && y <= handleY+handleH/2) {
+    isDragging = true;
+    e.preventDefault();
+  }
+});
+window.addEventListener('mouseup', () => isDragging=false);
+diag.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const {top} = diag.getBoundingClientRect();
+  handleY = Math.max(handleMinY, Math.min(handleMaxY, e.clientY - top));
+});
+
+  /* -----------------------------------------------------------
+     Helper function to determine RGB values on wavelength
+  ----------------------------------------------------------- */
+
+function rgbComponents(str) {
+  // expects “rgb(r,g,b)”
+  const [r, g, b] = str.match(/\d+/g).map(Number);
+  return { r, g, b };
+}
+
+function wavelengthToRGB(wl) {
+  // Clamp to visible range we support
+  wl = Math.max(400, Math.min(700, wl));
+
+  /* colour “stops” */
+  const stops = [
+    { w: 400, r:   0, g:   0, b: 200 },  // blue
+    { w: 475, r:   0, g: 255, b: 255 },  // cyan
+    { w: 550, r:   0, g: 200, b:   0 },  // green
+    { w: 625, r: 255, g: 255, b:   0 },  // yellow
+    { w: 700, r: 200, g:   0, b:   0 }   // red
+  ];
+
+  /* find the two stops wl falls between */
+  let i = 0;
+  while (wl > stops[i + 1].w) i++;
+
+  const s0 = stops[i];
+  const s1 = stops[i + 1];
+  const t  = (wl - s0.w) / (s1.w - s0.w);      // 0‒1 interpolation factor
+
+  /* linear-interpolate each channel */
+  const r = Math.round(s0.r + t * (s1.r - s0.r));
+  const g = Math.round(s0.g + t * (s1.g - s0.g));
+  const b = Math.round(s0.b + t * (s1.b - s0.b));
+
+  return `rgb(${r},${g},${b})`;
+}
+
+function paintInterference(screenX, screenW, topY, bottomY, midY, baseRGB) {
+  const step   = 2;                                          // vertical band height
+  const scaleY = (wavelength * screenDistance) / slitSeparation;
+
+  for (let y = topY; y < bottomY; y += step) {
+    const n   = (y - midY) / scaleY;                         // path-diff / λ
+    const I   = Math.pow(Math.cos(Math.PI * n), 2);          // intensity 0‒1
+
+    const r = Math.round(baseRGB.r * I);
+    const g = Math.round(baseRGB.g * I);
+    const b = Math.round(baseRGB.b * I);
+
+    dctx.fillStyle = `rgb(${r},${g},${b})`;
+    dctx.fillRect(screenX, y, screenW, step);
+  }
+}
+
+
+
+  /* -----------------------------------------------------------
+     Function which draws the main laser diagram
+  ----------------------------------------------------------- */
+
+function drawDiagram(detY) {
+  const w = diag.width, h = diag.height, midY = h/2;
+  const laserColor = wavelengthToRGB(lambda); // uses current wavelength in nm
+  const baseRGB   = rgbComponents(laserColor);          // {r,g,b}
+  dctx.clearRect(0,0,w,h);
+
+  /* laser picture */
+  if (laserImg.complete) dctx.drawImage(laserImg, 5, midY-15, 65, 30);
+
+  /* beam to slits */
+  const gratX = w*0.25;
+  dctx.strokeStyle=laserColor; dctx.lineWidth=20;
+  dctx.beginPath(); dctx.moveTo(70, midY); dctx.lineTo(gratX, midY); dctx.stroke();
+
+  /* double-slit barrier */
+  const bw=10,bh=8,sg=4;
+  dctx.fillStyle='#000';
+  dctx.fillRect(gratX-bw/2, midY-bh/2, bw,bh);              // centre
+  dctx.fillRect(gratX-bw/2, midY+0.5*bh+sg, bw,bh);         // lower
+  dctx.fillRect(gratX-bw/2, midY-1.5*bh-sg, bw,bh);         // upper
+
+  /* screen */
+  const screenX = w - 80, screenW = 20;
+  paintInterference(screenX, screenW, 10, h - 10, midY, baseRGB);   // <-- new
+  dctx.strokeStyle = '#000'; dctx.lineWidth = 1;
+  dctx.strokeRect(screenX, 10, screenW, h - 20);
+
+
+  /* detector point (white dot) */
+  dctx.fillStyle='white';
+  dctx.beginPath();
+  dctx.arc(screenX+screenW/2, detY, 2, 0, 2*Math.PI);
+  dctx.fill();
+
+  /* rays (upper & lower slits to detector) */
+  const deltaY = bh - sg/2;
+  dctx.strokeStyle='#0f0';
+  dctx.beginPath(); dctx.moveTo(gratX, midY-deltaY); dctx.lineTo(screenX, detY); dctx.stroke();
+  dctx.strokeStyle='#f00';
+  dctx.beginPath(); dctx.moveTo(gratX, midY+deltaY); dctx.lineTo(screenX, detY); dctx.stroke();
+
+  /* draggable handle */
+  if (detectorImg.complete)
+    dctx.drawImage(detectorImg, handleX-handleW/2, handleY-handleH/2, handleW, handleH);
+}
+
+  /* -----------------------------------------------------------
+     Function which draws the two individual wave traces
+  ----------------------------------------------------------- */
+
+function drawWaves(n) {
+  const w = wave.width, h = wave.height, midY = h/2;
+  const k = 2 * Math.PI / (wavelength * 150); // wave number (adjust scale as needed)
+  const omega = 0.2*(2 * Math.PI / wavelength); // change v in order to... change v.  Currently set @ 0.2
+  wctx.clearRect(0,0,w,h);
+
+  const amp = h*ampFrac, delta = 2*Math.PI*n;
+  wctx.lineWidth=2;
+
+  wctx.strokeStyle='red';
+  wctx.beginPath();
+  for(let x=0;x<=w;x++){
+    const y = midY + amp * Math.sin(k * x + omega * t);
+    x? wctx.lineTo(x,y) : wctx.moveTo(x,y);
+  }
+  wctx.stroke();
+
+  wctx.strokeStyle='lime';
+  wctx.beginPath();
+  for(let x=0;x<=w;x++){
+    const y = midY + amp * Math.sin(k * x + omega * t + delta);
+    x? wctx.lineTo(x,y) : wctx.moveTo(x,y);
+  }
+  wctx.stroke();
+
+  wctx.strokeStyle='#888';
+  wctx.beginPath(); wctx.moveTo(w-1,0); wctx.lineTo(w-1,h); wctx.stroke();
+
+  const piFraction = (-delta / Math.PI).toFixed(2);
+  document.getElementById("pathDiff").textContent = `Path difference (δ) ≈ ${(-n).toFixed(2)}λ`;
+  document.getElementById("phaseDiff").textContent = `Phase difference (φ) ≈ ${piFraction}π`;
+
+}
+
+  /* -----------------------------------------------------------
+     Function which draws the superposition wave trace
+  ----------------------------------------------------------- */
+
+function drawSuperposition(n) {
+  const laserColor = 'black'; // uses current wavelength in nm
+  const w = scan.width, h = scan.height;
+  const midY = h / 2;
+  const amp = h * ampFrac;
+  const delta = 2 * Math.PI * n;
+  const coeff = 0.8     //coefficient to make the graph physically a bit smaller
+  const k = 2 * Math.PI / (wavelength * 150); // wave number (adjust scale as needed)
+  const omega = 0.2*(2 * Math.PI / wavelength); // change v in order to... change v.  Currently set @ 0.2
+
+  sctx.clearRect(0, 0, w, h);
+
+  // Superposition wave: red + green
+  sctx.lineWidth = 2;
+  sctx.strokeStyle = laserColor;
+  sctx.beginPath();
+  for (let x = 0; x <= w; x++) {
+    const y1 = Math.sin(k * x + omega * t);
+    const y2 = Math.sin(k * x + omega * t + delta);
+    const y = midY + amp * coeff * (y1 + y2);
+    x ? sctx.lineTo(x, y) : sctx.moveTo(x, y);
+  }
+  sctx.stroke();
+
+  // Detector guideline at right edge
+  sctx.strokeStyle = '#888';
+  sctx.beginPath();
+  sctx.moveTo(w - 1, 0);
+  sctx.lineTo(w - 1, h);
+  sctx.stroke();
+}
+
+  /* -----------------------------------------------------------
+     Function which draws the zoomed in double slit
+  ----------------------------------------------------------- */
+
+
+function drawZoom(detY) {
+  const w = zoom.width, h = zoom.height;
+  zctx.clearRect(0, 0, w, h);
+
+  /* geometry --------------------------------------------------- */
+  const midX = 50;              // barrier x-pos
+  const marginFactor = 0.22 - separation/4;          // dynamic 0.12‒0.32
+  const margin = marginFactor * h;                 // pixel margin
+  const upperY = margin;
+  const lowerY = h - margin;
+  const slitH  = 8;             // slit height
+  const bw     = 8;             // barrier thickness
+
+  /* angle / ray vectors ---------------------------------------- */
+  const displacement = detY - diag.height / 2;
+  const theta =  -displacement / screenDistance;    // +θ = detector down
+  const rayLen = w - midX - 20;
+  const dx = rayLen;
+  const dy = -theta * rayLen;                      // invert for canvas Y
+
+  const len = Math.hypot(dx, dy);
+  const ux  = dx / len;
+  const uy  = dy / len;
+  const px  = -uy;                                // unit vector ⟂ ray
+  const py  =  ux;
+
+  /* barrier with two gaps -------------------------------------- */
+  zctx.fillStyle = '#000';
+  zctx.fillRect(midX - bw / 2, 0, bw, h);
+  zctx.clearRect(midX - bw / 2, upperY - slitH / 2, bw, slitH);
+  zctx.clearRect(midX - bw / 2, lowerY - slitH / 2, bw, slitH);
+
+  /* rays ------------------------------------------------------- */
+  zctx.strokeStyle = '#0f0';
+  zctx.beginPath();
+  zctx.moveTo(midX, upperY);
+  zctx.lineTo(midX + dx, upperY + dy);
+  zctx.stroke();
+
+  zctx.strokeStyle = '#f00';
+  zctx.beginPath();
+  zctx.moveTo(midX, lowerY);
+  zctx.lineTo(midX + dx, lowerY + dy);
+  zctx.stroke();
+
+  /* perpendicular helper (blue dashed) ------------------------- */
+  const proj = (upperY - lowerY) * uy;            // scalar projection
+  const footX = midX + proj * ux;
+  const footY = lowerY + proj * uy;
+
+  zctx.save();
+  zctx.strokeStyle = '#00f';
+  zctx.setLineDash([6, 4]);
+  zctx.beginPath();
+  zctx.moveTo(midX, upperY);
+  zctx.lineTo(footX, footY);
+  zctx.stroke();
+  zctx.restore();
+
+  /* -----------------------------------------------------------
+     PATH-DIFFERENCE SEGMENT (δ) — below the lower ray, black
+  ----------------------------------------------------------- */
+  const offset  = 8;      // distance below the ray
+  const tickLen = 10;     // ⟂ end-ticks length
+
+  /* unit vector along the lower ray */
+  const segDX = dx, segDY = dy;
+  const segLen = Math.hypot(segDX, segDY);
+  const uxSeg  = segDX / segLen;
+  const uySeg  = segDY / segLen;
+
+  /* perpendicular pointing “below” (screen-down) */
+  const pxSeg = -uySeg;
+  const pySeg =  uxSeg;
+
+  /* shift endpoints BELOW the ray (+offset) */
+  const startX = midX  + pxSeg * offset;      // lower slit
+  const startY = lowerY + pySeg * offset;
+  const endX   = footX  + pxSeg * offset;     // foot point
+  const endY   = footY  + pySeg * offset;
+
+  /* black measurement line */
+  zctx.save();
+  zctx.strokeStyle = '#000';
+  zctx.lineWidth   = 2;
+  zctx.beginPath();
+  zctx.moveTo(startX, startY);
+  zctx.lineTo(endX,   endY);
+  zctx.stroke();
+
+  /* perpendicular end-ticks */
+  const tickDx = (tickLen / 2) * pxSeg;
+  const tickDy = (tickLen / 2) * pySeg;
+
+  zctx.beginPath();
+  // start tick
+  zctx.moveTo(startX + tickDx, startY + tickDy);
+  zctx.lineTo(startX - tickDx, startY - tickDy);
+  // end tick
+  zctx.moveTo(endX + tickDx,   endY + tickDy);
+  zctx.lineTo(endX - tickDx,   endY - tickDy);
+  zctx.stroke();
+  zctx.restore();
+
+  /* δ label, nudged further down */
+  const midXseg = (startX + endX) / 2;
+  const midYseg = (startY + endY) / 2;
+  zctx.font = '14px sans-serif';
+  zctx.fillStyle = '#000';
+  zctx.fillText('δ', midXseg - 2, midYseg + 13);   // +20 gives extra drop
+
+  /* θ arc (always the smaller one) ----------------------------- */
+  const arcR   = 100;
+  const start  = Math.PI / 2;            // vertical-down reference
+  let   end    = Math.atan2(py, px);     // angle of helper line
+
+  // wrap the difference into (-π , π] so we always take the small arc
+  let diff = end - start;
+  if (diff >  Math.PI) diff -= 2 * Math.PI;
+  if (diff < -Math.PI) diff += 2 * Math.PI;
+  end = start + diff;
+
+  const anticlock = diff < 0;            // true → draw CCW, false → CW
+
+  zctx.strokeStyle = '#00f';
+  zctx.beginPath();
+  zctx.arc(midX, upperY, arcR, start, end, anticlock);
+  zctx.stroke();
+
+  /* θ label ---------------------------------------------------- */
+  const midAng = start + diff / 2;
+  const tx = midX + (arcR + 10) * Math.cos(midAng);
+  const ty = upperY + (arcR + 10) * Math.sin(midAng);
+
+  zctx.font = '14px sans-serif';
+  zctx.fillStyle = '#00f';
+  zctx.fillText('θ', tx - 4, ty + 5);
+
+}
+
+/* ------------ animation loop ------------ */
+function animate() {
+  const midY = diag.height/2;
+  const displacement = handleY - midY;                                // <<< changed
+  const n = (displacement * slitSeparation) / (wavelength * screenDistance); // <<< changed
+
+  drawDiagram(handleY);    // rays & dot follow handleY               // <<< changed
+  drawWaves(n);
+  drawSuperposition(n);
+  drawZoom(handleY);   // new panel
+
+  if (!freezeToggle.checked) {
+    t += 0.05;
+  }
+
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>
